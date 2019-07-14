@@ -75,16 +75,6 @@
     }
     async void Logout()
     {
-        AuthToken token = await LocalStorage.GetAsync<AuthToken>(_jsRuntime, "authtoken");
-        if(token != null)
-        {    
-            _httpClient.DefaultRequestHeaders.Add("X-ZUMO-AUTH", token.AuthenticationToken);
-            var authresponse = await _httpClient.GetAsync(Constants.AzureFunctionAuthURL + Constants.LogOutEndpoint);
-            if(authresponse.IsSuccessStatusCode)
-            {
-                await LocalStorage.DeleteAsync(_jsRuntime, "authtoken");
-                _easyAuthAuthenticationStateProvider.NotifyAuthenticationStateChanged();
-            }
-        }
+        await _easyAuthAuthenticationStateProvider.Logout();
     }
 }

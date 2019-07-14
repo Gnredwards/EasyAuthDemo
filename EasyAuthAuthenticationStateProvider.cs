@@ -8,7 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Text.Json.Serialization;
-using System.Text.Json;
+using System.Linq;
 
 namespace EasyAuthDemo
 {
@@ -47,9 +47,10 @@ namespace EasyAuthDemo
                         default: break;
                     }                    
                 }
-                catch (Exception e)
+                catch (HttpRequestException e)
                 {
-                    Console.WriteLine(e.Message);
+                    Console.WriteLine("Unable to authenticate " + e.Message);
+                    _httpClient.DefaultRequestHeaders.Remove("X-ZUMO-AUTH");
                 }
             }
             await LocalStorage.DeleteAsync(_jsRuntime, "authtoken");
@@ -74,7 +75,6 @@ namespace EasyAuthDemo
                 return JsonSerializer.Parse<AuthToken>(matches[0].Value);
             }
             return new AuthToken();
-
         }
         private Task<AuthenticationState> GetTwitterClaims(AuthInfo authinfo)
         {
@@ -90,6 +90,17 @@ namespace EasyAuthDemo
         public void NotifyAuthenticationStateChanged()
         {
             NotifyAuthenticationStateChanged(GetAuthenticationStateAsync());
+        }
+        public async Task Logout()
+        {
+            await LocalStorage.DeleteAsync(_jsRuntime, "authtoken");
+            var authresponse = await _httpClient.GetAsync(Constants.AzureFunctionAuthURL + Constants.LogOutEndpoint);
+            if(authresponse.IsSuccessStatusCode)
+            {
+                _httpClient.DefaultRequestHeaders.Remove("X-ZUMO-AUTH");
+                await LocalStorage.DeleteAsync(_jsRuntime, "authtoken");
+                NotifyAuthenticationStateChanged();
+            }          
         }
     }
 }
