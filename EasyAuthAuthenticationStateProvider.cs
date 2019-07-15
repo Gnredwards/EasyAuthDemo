@@ -34,13 +34,13 @@ namespace EasyAuthDemo
                 _httpClient.DefaultRequestHeaders.Add("X-ZUMO-AUTH", token.AuthenticationToken);
                 try
                 {
-                    var authresponse = await _httpClient.GetStringAsync(Constants.AzureFunctionAuthURL + Constants.AuthMeEndpoint);
+                    var authResponse = await _httpClient.GetStringAsync(Constants.AzureFunctionAuthURL + Constants.AuthMeEndpoint);
                     
                     //To see the response uncomment the line below
                     //Console.WriteLine(authresponse);
 
                     await LocalStorage.SetAsync(_jsRuntime, "authtoken", token);
-                    var authInfo = JsonSerializer.Parse<List<AuthInfo>>(authresponse);
+                    var authInfo = JsonSerializer.Parse<List<AuthInfo>>(authResponse);
                     switch (authInfo[0].ProviderName)
                     {
                         case "twitter": return await GetTwitterClaims(authInfo[0]);
@@ -64,43 +64,50 @@ namespace EasyAuthDemo
             {
                 return await LocalStorage.GetAsync<AuthToken>(_jsRuntime, "authtoken");
             }
-
-            await _jsRuntime.InvokeAsync<string>(
-                        "EasyAuthDemoUtilities.updateURLwithoutReload", Constants.BlazorWebsiteURL);
-
             Regex getJsonRegEx = new Regex(@"\{(.|\s)*\}");
             MatchCollection matches = getJsonRegEx.Matches(authTokenFragment);
             if (matches.Count == 1)
             {
-                return JsonSerializer.Parse<AuthToken>(matches[0].Value);
+                AuthToken authToken;
+                try
+                {
+                    authToken = JsonSerializer.Parse<AuthToken>(matches[0].Value);
+                }
+                // JsonSerializer in preview, don't know what it will thow.
+                catch (Exception e)
+                {
+                    Console.WriteLine("Error in authentication token")
+                    return new AuthToken();
+                }
+                await _jsRuntime.InvokeAsync<string>(
+                        "EasyAuthDemoUtilities.updateURLwithoutReload", Constants.BlazorWebsiteURL);
+                return authToken;
             }
             return new AuthToken();
         }
-        private Task<AuthenticationState> GetTwitterClaims(AuthInfo authinfo)
+        private Task<AuthenticationState> GetTwitterClaims(AuthInfo authInfo)
         {
             List<Claim> userClaims = new List<Claim>();
-            foreach (AuthUserClaim userClaim in authinfo.UserClaims)
+            foreach (AuthUserClaim userClaim in authInfo.UserClaims)
             {
                 userClaims.Add(new Claim(userClaim.Type, userClaim.Value));
             }
             var identity = new ClaimsIdentity(userClaims, "EasyAuth");
-
             return Task.FromResult(new AuthenticationState(new ClaimsPrincipal(identity)));
+        }
+        public async Task Logout()
+        {
+            var authresponse = await _httpClient.GetAsync(Constants.AzureFunctionAuthURL + Constants.LogOutEndpoint);
+            _httpClient.DefaultRequestHeaders.Remove("X-ZUMO-AUTH");
+            await LocalStorage.DeleteAsync(_jsRuntime, "authtoken");
+            if(authresponse.IsSuccessStatusCode)
+            {
+                NotifyAuthenticationStateChanged();
+            }          
         }
         public void NotifyAuthenticationStateChanged()
         {
             NotifyAuthenticationStateChanged(GetAuthenticationStateAsync());
-        }
-        public async Task Logout()
-        {
-            await LocalStorage.DeleteAsync(_jsRuntime, "authtoken");
-            var authresponse = await _httpClient.GetAsync(Constants.AzureFunctionAuthURL + Constants.LogOutEndpoint);
-            if(authresponse.IsSuccessStatusCode)
-            {
-                _httpClient.DefaultRequestHeaders.Remove("X-ZUMO-AUTH");
-                await LocalStorage.DeleteAsync(_jsRuntime, "authtoken");
-                NotifyAuthenticationStateChanged();
-            }          
         }
     }
 }
